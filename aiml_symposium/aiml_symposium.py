@@ -37,35 +37,13 @@ TOP_TESTING_DIR_NAME = '{0:s}/testing'.format(TOP_INPUT_DIR_NAME)
 BEST_MODEL_FILE_NAME = '{0:s}/pretrained_model/model.h5'.format(
     TOP_INPUT_DIR_NAME)
 
-# These constants help to find input data.
+# Used to find input files.
 TIME_FORMAT = '%Y%m%d%H'
 TIME_FORMAT_REGEX = '[0-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9][0-2][0-9]'
 BATCH_NUMBER_REGEX = '[0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
 NUM_BATCHES_PER_DIRECTORY = 1000
 
-# Target values.
-NO_FRONT_ENUM = 0
-WARM_FRONT_ENUM = 1
-COLD_FRONT_ENUM = 2
-
-# Valid pooling types.
-MAX_POOLING_TYPE_STRING = 'max'
-MEAN_POOLING_TYPE_STRING = 'avg'
-VALID_POOLING_TYPE_STRINGS = [MAX_POOLING_TYPE_STRING, MEAN_POOLING_TYPE_STRING]
-
-# Valid activation functions.
-SIGMOID_FUNCTION_NAME = 'sigmoid'
-TANH_FUNCTION_NAME = 'tanh'
-RELU_FUNCTION_NAME = 'relu'
-SELU_FUNCTION_NAME = 'selu'
-ELU_FUNCTION_NAME = 'elu'
-LEAKY_RELU_FUNCTION_NAME = 'leaky_relu'
-VALID_ACTIVATION_FUNCTION_NAMES = [
-    SIGMOID_FUNCTION_NAME, TANH_FUNCTION_NAME, RELU_FUNCTION_NAME,
-    SELU_FUNCTION_NAME, ELU_FUNCTION_NAME, LEAKY_RELU_FUNCTION_NAME
-]
-
-# Predictor variables.
+# Names of predictor variables.
 TEMPERATURE_NAME = 'temperature_kelvins'
 HEIGHT_NAME = 'height_m_asl'
 SPECIFIC_HUMIDITY_NAME = 'specific_humidity_kg_kg01'
@@ -80,20 +58,13 @@ VALID_PREDICTOR_NAMES = [
 
 DUMMY_SURFACE_PRESSURE_MB = 1013
 
-# Dictionary keys.
-PREDICTOR_MATRIX_KEY = 'predictor_matrix'
-TARGET_MATRIX_KEY = 'target_matrix'
-VALID_TIMES_KEY = 'target_times_unix_sec'
-ROW_INDICES_KEY = 'row_indices'
-COLUMN_INDICES_KEY = 'column_indices'
-NORMALIZATION_TYPE_KEY = 'normalization_type_string'
-PREDICTOR_NAMES_KEY = 'narr_predictor_names'
-PRESSURE_LEVELS_KEY = 'pressure_levels_mb'
-DILATION_DISTANCE_KEY = 'dilation_distance_metres'
-MASK_MATRIX_KEY = 'narr_mask_matrix'
+# Predictors and labels.
+NO_FRONT_ENUM = 0
+WARM_FRONT_ENUM = 1
+COLD_FRONT_ENUM = 2
 
-FIRST_NORM_PARAM_KEY = 'first_normalization_param_matrix'
-SECOND_NORM_PARAM_KEY = 'second_normalization_param_matrix'
+WARM_FRONT_PROB_THRESHOLD = 0.65
+COLD_FRONT_PROB_THRESHOLD = 0.65
 
 PREDICTOR_NAMES_FOR_CNN = [
     U_WIND_GRID_RELATIVE_NAME, V_WIND_GRID_RELATIVE_NAME, TEMPERATURE_NAME,
@@ -108,32 +79,31 @@ PRESSURE_LEVELS_FOR_CNN_MB = numpy.array([
     850, 850, 850, 850
 ], dtype=int)
 
-WARM_FRONT_PROB_THRESHOLD = 0.65
-COLD_FRONT_PROB_THRESHOLD = 0.65
+# Pooling functions, activation functions, performance metrics.
+MAX_POOLING_TYPE_STRING = 'max'
+MEAN_POOLING_TYPE_STRING = 'avg'
+VALID_POOLING_TYPE_STRINGS = [MAX_POOLING_TYPE_STRING, MEAN_POOLING_TYPE_STRING]
 
-# Constants for plotting.
-WIND_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
-FEATURE_COLOUR_MAP_OBJECT = pyplot.get_cmap('seismic')
-SALIENCY_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
+SIGMOID_FUNCTION_NAME = 'sigmoid'
+TANH_FUNCTION_NAME = 'tanh'
+RELU_FUNCTION_NAME = 'relu'
+SELU_FUNCTION_NAME = 'selu'
+ELU_FUNCTION_NAME = 'elu'
+LEAKY_RELU_FUNCTION_NAME = 'leaky_relu'
 
-FIGURE_WIDTH_INCHES = 15
-FIGURE_HEIGHT_INCHES = 15
+VALID_ACTIVATION_FUNCTION_NAMES = [
+    SIGMOID_FUNCTION_NAME, TANH_FUNCTION_NAME, RELU_FUNCTION_NAME,
+    SELU_FUNCTION_NAME, ELU_FUNCTION_NAME, LEAKY_RELU_FUNCTION_NAME
+]
 
-FONT_SIZE = 30
-pyplot.rc('font', size=FONT_SIZE)
-pyplot.rc('axes', titlesize=FONT_SIZE)
-pyplot.rc('axes', labelsize=FONT_SIZE)
-pyplot.rc('xtick', labelsize=FONT_SIZE)
-pyplot.rc('ytick', labelsize=FONT_SIZE)
-pyplot.rc('legend', fontsize=FONT_SIZE)
-pyplot.rc('figure', titlesize=FONT_SIZE)
+LIST_OF_METRIC_FUNCTIONS = [
+    keras_metrics.accuracy, keras_metrics.binary_pod,
+    keras_metrics.binary_pofd, keras_metrics.binary_peirce_score,
+    keras_metrics.binary_csi, keras_metrics.binary_frequency_bias,
+    keras_metrics.binary_success_ratio
+]
 
-LEVELS_FOR_CSI_CONTOURS = numpy.array([
-    0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1
-])
-LEVELS_FOR_BIAS_CONTOURS = numpy.array([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5])
-
-# Convolutional kernels.
+# Preset (not learned) convolution kernels.
 EDGE_DETECTOR_MATRIX1 = numpy.array([
     [-1, -1, -1],
     [-1, 8, -1],
@@ -152,13 +122,41 @@ EDGE_DETECTOR_MATRIX3 = numpy.array([
     [0, 1, 0]
 ], dtype=float)
 
-# These metrics will be reported during training of a CNN (convolutional neural
-# network).
-LIST_OF_METRIC_FUNCTIONS = [
-    keras_metrics.accuracy, keras_metrics.binary_pod,
-    keras_metrics.binary_pofd, keras_metrics.binary_peirce_score,
-    keras_metrics.binary_csi, keras_metrics.binary_frequency_bias,
-    keras_metrics.binary_success_ratio
+# Plotting.
+WIND_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
+FEATURE_COLOUR_MAP_OBJECT = pyplot.get_cmap('seismic')
+SALIENCY_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
+
+FONT_SIZE = 30
+FIGURE_WIDTH_INCHES = 15
+FIGURE_HEIGHT_INCHES = 15
+
+pyplot.rc('font', size=FONT_SIZE)
+pyplot.rc('axes', titlesize=FONT_SIZE)
+pyplot.rc('axes', labelsize=FONT_SIZE)
+pyplot.rc('xtick', labelsize=FONT_SIZE)
+pyplot.rc('ytick', labelsize=FONT_SIZE)
+pyplot.rc('legend', fontsize=FONT_SIZE)
+pyplot.rc('figure', titlesize=FONT_SIZE)
+
+# Dictionary keys.
+PREDICTOR_MATRIX_KEY = 'predictor_matrix'
+TARGET_MATRIX_KEY = 'target_matrix'
+VALID_TIMES_KEY = 'target_times_unix_sec'
+ROW_INDICES_KEY = 'row_indices'
+COLUMN_INDICES_KEY = 'column_indices'
+NORMALIZATION_TYPE_KEY = 'normalization_type_string'
+PREDICTOR_NAMES_KEY = 'narr_predictor_names'
+PRESSURE_LEVELS_KEY = 'pressure_levels_mb'
+DILATION_DISTANCE_KEY = 'dilation_distance_metres'
+MASK_MATRIX_KEY = 'narr_mask_matrix'
+
+FIRST_NORM_PARAM_KEY = 'first_normalization_param_matrix'
+SECOND_NORM_PARAM_KEY = 'second_normalization_param_matrix'
+
+METADATA_KEYS_TO_REPORT = [
+    VALID_TIMES_KEY, NORMALIZATION_TYPE_KEY, PREDICTOR_NAMES_KEY,
+    PRESSURE_LEVELS_KEY, FIRST_NORM_PARAM_KEY, SECOND_NORM_PARAM_KEY
 ]
 
 
@@ -379,6 +377,135 @@ def create_paneled_figure(
             axes_object_matrix[i, j].set(aspect='equal')
 
     return figure_object, axes_object_matrix
+
+
+def plot_feature_map(
+        feature_matrix, axes_object=None,
+        colour_map_object=FEATURE_COLOUR_MAP_OBJECT, min_colour_value=None,
+        max_colour_value=None):
+    """Plots feature map.
+
+    A "feature map" is a spatial grid containing either a raw or transformed
+    input variable.  The "raw" variables are the predictors, whose names are
+    listed at the top of this notebook.
+
+    :param feature_matrix: Feature map as M-by-N numpy array.
+    :param axes_object: Handle for axes on which feature map will be plotted
+        (instance of `matplotlib.axes._subplots.AxesSubplot`).  If `axes_object
+        is None`, this method will create a new set of axes.
+    :param colour_map_object: Colour map (instance of `matplotlib.pyplot.cm`).
+    :param min_colour_value: Minimum value in colour map.
+    :param max_colour_value: Max value in colour map.
+    :return: axes_object: Handle for axes on which feature map was plotted
+        (instance of `matplotlib.axes._subplots.AxesSubplot`).
+    """
+
+    error_checking.assert_is_numpy_array_without_nan(feature_matrix)
+    error_checking.assert_is_numpy_array(feature_matrix, num_dimensions=2)
+
+    if min_colour_value is None or max_colour_value is None:
+        max_colour_value = numpy.percentile(
+            numpy.absolute(feature_matrix), 99.
+        )
+        max_colour_value = numpy.maximum(max_colour_value, 1e-6)
+        min_colour_value = -1 * max_colour_value
+
+    if axes_object is None:
+        _, axes_object = pyplot.subplots(
+            1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
+        )
+
+    axes_object.pcolormesh(
+        feature_matrix, cmap=colour_map_object, vmin=min_colour_value,
+        vmax=max_colour_value, shading='flat', edgecolors='None')
+
+    axes_object.set_xlim(0., feature_matrix.shape[1])
+    axes_object.set_ylim(0., feature_matrix.shape[0])
+    axes_object.set_xticks([])
+    axes_object.set_yticks([])
+
+    _add_colour_bar(
+        axes_object=axes_object, colour_map_object=colour_map_object,
+        values_to_colour=feature_matrix, min_colour_value=min_colour_value,
+        max_colour_value=max_colour_value, orientation_string='horizontal')
+
+    return axes_object
+
+
+def plot_wind_barbs(
+        u_wind_matrix, v_wind_matrix, axes_object=None,
+        colour_map_object=WIND_COLOUR_MAP_OBJECT, min_colour_speed=-1.,
+        max_colour_speed=0., barb_length=8, empty_barb_radius=0.1,
+        plot_every=2):
+    """Uses barbs to plot wind field.
+
+    Default input args for `colour_map_object`, `min_colour_speed`, and
+    `max_colour_speed` will make all wind barbs black, regardless of their
+    speed.
+
+    :param u_wind_matrix: M-by-N numpy array of eastward velocities.
+    :param v_wind_matrix: M-by-N numpy array of northward velocities.
+    :param axes_object: See doc for `plot_feature_map`.
+    :param colour_map_object: Colour map (instance of `matplotlib.pyplot.cm`).
+    :param min_colour_speed: Minimum speed (velocity magnitude) in colour map.
+    :param max_colour_speed: Max speed in colour map.
+    :param barb_length: Length of each wind barb.
+    :param empty_barb_radius: Radius for "empty" wind barb (zero speed).
+    :param plot_every: Will plot wind barb every K grid cells, where
+        K = `plot_every`.
+    :return: axes_object: See doc for `plot_feature_map`.
+    """
+
+    error_checking.assert_is_numpy_array_without_nan(u_wind_matrix)
+    error_checking.assert_is_numpy_array(u_wind_matrix, num_dimensions=2)
+
+    error_checking.assert_is_numpy_array_without_nan(v_wind_matrix)
+    error_checking.assert_is_numpy_array(
+        v_wind_matrix, exact_dimensions=numpy.array(u_wind_matrix.shape)
+    )
+
+    error_checking.assert_is_greater(max_colour_speed, min_colour_speed)
+    error_checking.assert_is_geq(max_colour_speed, 0.)
+    error_checking.assert_is_integer(plot_every)
+    error_checking.assert_is_geq(plot_every, 1)
+
+    barb_size_dict = {
+        'emptybarb': empty_barb_radius
+    }
+    barb_increment_dict = {
+        'half': 0.3,
+        'full': 0.6,
+        'flag': 3.
+    }
+
+    wind_speed_matrix = numpy.sqrt(u_wind_matrix ** 2 + v_wind_matrix ** 2)
+
+    if axes_object is None:
+        _, axes_object = pyplot.subplots(
+            1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
+        )
+
+    num_rows = u_wind_matrix.shape[0]
+    num_columns = u_wind_matrix.shape[1]
+    unique_y_coords = -0.5 + numpy.linspace(1, num_rows, num=num_rows)
+    unique_x_coords = -0.5 + numpy.linspace(1, num_columns, num=num_columns)
+
+    x_coord_matrix, y_coord_matrix = numpy.meshgrid(
+        unique_x_coords, unique_y_coords)
+
+    axes_object.barbs(
+        x_coord_matrix[::plot_every, ::plot_every],
+        y_coord_matrix[::plot_every, ::plot_every],
+        u_wind_matrix[::plot_every, ::plot_every],
+        v_wind_matrix[::plot_every, ::plot_every],
+        wind_speed_matrix[::plot_every, ::plot_every],
+        length=barb_length, sizes=barb_size_dict,
+        barb_increments=barb_increment_dict, fill_empty=True, rounding=False,
+        cmap=colour_map_object,
+        clim=numpy.array([min_colour_speed, max_colour_speed])
+    )
+
+    return axes_object
 
 
 def find_training_file(
@@ -676,59 +803,6 @@ def read_examples(
     return example_dict
 
 
-def plot_feature_map(
-        feature_matrix, axes_object=None,
-        colour_map_object=FEATURE_COLOUR_MAP_OBJECT, min_colour_value=None,
-        max_colour_value=None):
-    """Plots feature map.
-
-    A "feature map" is a spatial grid containing either a raw or transformed
-    input variable.  The "raw" variables are the predictors, whose names are
-    listed at the top of this notebook.
-
-    :param feature_matrix: Feature map as M-by-N numpy array.
-    :param axes_object: Handle for axes on which feature map will be plotted
-        (instance of `matplotlib.axes._subplots.AxesSubplot`).  If `axes_object
-        is None`, this method will create a new set of axes.
-    :param colour_map_object: Colour map (instance of `matplotlib.pyplot.cm`).
-    :param min_colour_value: Minimum value in colour map.
-    :param max_colour_value: Max value in colour map.
-    :return: axes_object: Handle for axes on which feature map was plotted
-        (instance of `matplotlib.axes._subplots.AxesSubplot`).
-    """
-
-    error_checking.assert_is_numpy_array_without_nan(feature_matrix)
-    error_checking.assert_is_numpy_array(feature_matrix, num_dimensions=2)
-
-    if min_colour_value is None or max_colour_value is None:
-        max_colour_value = numpy.percentile(
-            numpy.absolute(feature_matrix), 99.
-        )
-        max_colour_value = numpy.maximum(max_colour_value, 1e-6)
-        min_colour_value = -1 * max_colour_value
-
-    if axes_object is None:
-        _, axes_object = pyplot.subplots(
-            1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
-        )
-
-    axes_object.pcolormesh(
-        feature_matrix, cmap=colour_map_object, vmin=min_colour_value,
-        vmax=max_colour_value, shading='flat', edgecolors='None')
-
-    axes_object.set_xlim(0., feature_matrix.shape[1])
-    axes_object.set_ylim(0., feature_matrix.shape[0])
-    axes_object.set_xticks([])
-    axes_object.set_yticks([])
-
-    _add_colour_bar(
-        axes_object=axes_object, colour_map_object=colour_map_object,
-        values_to_colour=feature_matrix, min_colour_value=min_colour_value,
-        max_colour_value=max_colour_value, orientation_string='horizontal')
-
-    return axes_object
-
-
 def do_2d_convolution(
         feature_matrix, kernel_matrix, pad_edges=False, stride_length_px=1):
     """Convolves 2-D feature maps with 2-D kernel.
@@ -780,82 +854,6 @@ def do_2d_convolution(
         data_format='channels_last')
 
     return feature_tensor.eval(session=K.get_session())
-
-
-def plot_wind_barbs(
-        u_wind_matrix, v_wind_matrix, axes_object=None,
-        colour_map_object=WIND_COLOUR_MAP_OBJECT, min_colour_speed=-1.,
-        max_colour_speed=0., barb_length=8, empty_barb_radius=0.1,
-        plot_every=2):
-    """Uses barbs to plot wind field.
-
-    Default input args for `colour_map_object`, `min_colour_speed`, and
-    `max_colour_speed` will make all wind barbs black, regardless of their
-    speed.
-
-    :param u_wind_matrix: M-by-N numpy array of eastward velocities.
-    :param v_wind_matrix: M-by-N numpy array of northward velocities.
-    :param axes_object: See doc for `plot_feature_map`.
-    :param colour_map_object: Colour map (instance of `matplotlib.pyplot.cm`).
-    :param min_colour_speed: Minimum speed (velocity magnitude) in colour map.
-    :param max_colour_speed: Max speed in colour map.
-    :param barb_length: Length of each wind barb.
-    :param empty_barb_radius: Radius for "empty" wind barb (zero speed).
-    :param plot_every: Will plot wind barb every K grid cells, where
-        K = `plot_every`.
-    :return: axes_object: See doc for `plot_feature_map`.
-    """
-
-    error_checking.assert_is_numpy_array_without_nan(u_wind_matrix)
-    error_checking.assert_is_numpy_array(u_wind_matrix, num_dimensions=2)
-
-    error_checking.assert_is_numpy_array_without_nan(v_wind_matrix)
-    error_checking.assert_is_numpy_array(
-        v_wind_matrix, exact_dimensions=numpy.array(u_wind_matrix.shape)
-    )
-
-    error_checking.assert_is_greater(max_colour_speed, min_colour_speed)
-    error_checking.assert_is_geq(max_colour_speed, 0.)
-    error_checking.assert_is_integer(plot_every)
-    error_checking.assert_is_geq(plot_every, 1)
-
-    barb_size_dict = {
-        'emptybarb': empty_barb_radius
-    }
-    barb_increment_dict = {
-        'half': 0.3,
-        'full': 0.6,
-        'flag': 3.
-    }
-
-    wind_speed_matrix = numpy.sqrt(u_wind_matrix ** 2 + v_wind_matrix ** 2)
-
-    if axes_object is None:
-        _, axes_object = pyplot.subplots(
-            1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
-        )
-
-    num_rows = u_wind_matrix.shape[0]
-    num_columns = u_wind_matrix.shape[1]
-    unique_y_coords = -0.5 + numpy.linspace(1, num_rows, num=num_rows)
-    unique_x_coords = -0.5 + numpy.linspace(1, num_columns, num=num_columns)
-
-    x_coord_matrix, y_coord_matrix = numpy.meshgrid(
-        unique_x_coords, unique_y_coords)
-
-    axes_object.barbs(
-        x_coord_matrix[::plot_every, ::plot_every],
-        y_coord_matrix[::plot_every, ::plot_every],
-        u_wind_matrix[::plot_every, ::plot_every],
-        v_wind_matrix[::plot_every, ::plot_every],
-        wind_speed_matrix[::plot_every, ::plot_every],
-        length=barb_length, sizes=barb_size_dict,
-        barb_increments=barb_increment_dict, fill_empty=True, rounding=False,
-        cmap=colour_map_object,
-        clim=numpy.array([min_colour_speed, max_colour_speed])
-    )
-
-    return axes_object
 
 
 def do_activation(input_values, function_name, alpha_parameter=0.2):
@@ -1853,23 +1851,7 @@ def _run():
     This is effectively the main method.
     """
 
-    # Finding a Training File: Example 1
-    batch_number = 179
-
-    training_example_file_name = find_training_file(
-        top_training_dir_name=TOP_TRAINING_DIR_NAME, batch_number=batch_number,
-        raise_error_if_missing=False)
-    print(training_example_file_name)
-
-    # Finding a Training File: Example 2
-    batch_number = 179
-
-    training_example_file_name = find_training_file(
-        top_training_dir_name=TOP_TRAINING_DIR_NAME, batch_number=batch_number,
-        raise_error_if_missing=True)
-    print(training_example_file_name)
-
-    # Finding Many Training Files: Example
+    # Example: Finding training files
     first_batch_number = 0
     last_batch_number = 1000
 
@@ -1881,7 +1863,7 @@ def _run():
     for this_file_name in training_example_file_names:
         print(this_file_name)
 
-    # Reading a Training File: Example 1
+    # Example: Reading metadata from training file
     batch_number = 179
 
     training_example_file_name = find_training_file(
@@ -1892,11 +1874,14 @@ def _run():
         netcdf_file_name=training_example_file_name, metadata_only=True)
 
     for this_key in training_example_dict:
+        if this_key not in METADATA_KEYS_TO_REPORT:
+            continue
+
         print('{0:s} ... {1:s}\n'.format(
             this_key, str(training_example_dict[this_key])
         ))
 
-    # Reading a Training File: Example 2
+    # Example: Reading everything from training file
     predictor_names = [
         U_WIND_GRID_RELATIVE_NAME, V_WIND_GRID_RELATIVE_NAME,
         TEMPERATURE_NAME, SPECIFIC_HUMIDITY_NAME
@@ -1911,14 +1896,6 @@ def _run():
         netcdf_file_name=training_example_file_name, metadata_only=False,
         predictor_names_to_keep=predictor_names,
         pressure_levels_to_keep_mb=pressure_levels_mb)
-
-    for this_key in training_example_dict:
-        if this_key in [PREDICTOR_MATRIX_KEY, TARGET_MATRIX_KEY]:
-            continue
-
-        print('{0:s} ... {1:s}\n'.format(
-            this_key, str(training_example_dict[this_key])
-        ))
 
     print('Shape of predictor matrix = {0:s}'.format(
         str(training_example_dict[PREDICTOR_MATRIX_KEY].shape)
@@ -1954,23 +1931,27 @@ def _run():
     # Understanding the Predictor Matrix
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
 
-    for m in range(len(predictor_names)):
+    for k in range(len(predictor_names)):
+        this_mean = training_example_dict[FIRST_NORM_PARAM_KEY][0, k]
+        this_stdev = training_example_dict[SECOND_NORM_PARAM_KEY][0, k]
+
+        this_normalized_matrix = predictor_matrix[0, :5, :5, k]
+        this_denorm_matrix = this_mean + this_stdev * this_normalized_matrix
+
         print((
-            'Normalized {0:s} for southwest corner of first example:\n{1:s}\n'
+            'Normalized {0:s} in southwest corner of first example:\n{1:s}\n'
         ).format(
-            predictor_names[m], str(predictor_matrix[8, :5, :5, m])
+            predictor_names[k], str(this_normalized_matrix)
         ))
 
         print((
-            'Min and max normalized {0:s} over all examples and grid cells = '
-            '{1:.4f}, {2:.4f}\n'
+            '*De*normalized {0:s} in southwest corner of first example:'
+            '\n{1:s}\n'
         ).format(
-            predictor_names[m],
-            numpy.min(predictor_matrix[..., m]),
-            numpy.max(predictor_matrix[..., m])
+            predictor_names[k], str(this_denorm_matrix)
         ))
 
-    # Random Convolution: Example 1
+    # Example 1 of random convolution
     num_kernel_rows = 3
     num_kernel_columns = 3
 
@@ -1995,7 +1976,7 @@ def _run():
         pad_edges=True, stride_length_px=1)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2004,7 +1985,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Random Convolution: Example 2
+    # Example 2 of random convolution
     num_kernel_rows = 3
     num_kernel_columns = 3
 
@@ -2029,7 +2010,7 @@ def _run():
         pad_edges=False, stride_length_px=1)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2038,7 +2019,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Random Convolution: Example 3
+    # Example 3 of random convolution
     num_kernel_rows = 3
     num_kernel_columns = 3
 
@@ -2063,7 +2044,7 @@ def _run():
         pad_edges=False, stride_length_px=2)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2072,7 +2053,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Edge Detection: Example 1
+    # Example 1 of edge detection
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2093,7 +2074,7 @@ def _run():
         pad_edges=False, stride_length_px=1)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2102,7 +2083,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Edge Detection: Example 2
+    # Example 2 of edge detection
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2123,7 +2104,7 @@ def _run():
         pad_edges=False, stride_length_px=1)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2132,7 +2113,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Edge Detection: Example 3
+    # Example 3 of edge detection
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2153,7 +2134,7 @@ def _run():
         pad_edges=False, stride_length_px=1)
     feature_matrix = feature_matrix[0, ..., 0]
 
-    print('Shape of output feature map = {0:s}'.format(
+    print('Shape of output map = {0:s}'.format(
         str(feature_matrix.shape)
     ))
 
@@ -2162,7 +2143,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After convolution')
 
-    # Example: Multi-channel Convolution
+    # Multi-channel Convolution
     temperature_matrix = predictor_matrix[
         8, ..., predictor_names.index(TEMPERATURE_NAME)
     ]
@@ -2218,7 +2199,7 @@ def _run():
 
         this_axes_object.set_title('Filter {0:d} after convolution'.format(k))
 
-    # Activation Example 1
+    # Standard Activation Functions
     function_names_keras = [
         SIGMOID_FUNCTION_NAME, TANH_FUNCTION_NAME, RELU_FUNCTION_NAME
     ]
@@ -2252,7 +2233,7 @@ def _run():
 
     axes_object.legend(loc='upper left')
 
-    # Activation Example 2
+    # Variants of ReLU
     function_names_keras = [
         SELU_FUNCTION_NAME, ELU_FUNCTION_NAME, LEAKY_RELU_FUNCTION_NAME
     ]
@@ -2286,7 +2267,7 @@ def _run():
 
     axes_object.legend(loc='upper left')
 
-    # Pooling Example 1
+    # Example 1 of pooling
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2317,7 +2298,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After max-pooling')
 
-    # Pooling Example 2
+    # Example 2 of pooling
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2348,7 +2329,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After mean-pooling')
 
-    # Pooling Example 3
+    # Example 3 of pooling
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2379,7 +2360,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After max-pooling')
 
-    # Workflow of a CNN: Example 1
+    # Example 1 of convolution block
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
@@ -2441,13 +2422,13 @@ def _run():
     )
     axes_object_matrix[1, 1].set_title('After max-pooling')
 
-    # Workflow of a CNN: Example 2
+    # Example 2 of convolution block
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[8, ..., temperature_index]
 
     _, axes_object_matrix = create_paneled_figure(
-        num_rows=2, num_columns=2, horizontal_spacing=0.2, vertical_spacing=0.2)
+        num_rows=2, num_columns=3, horizontal_spacing=0.2, vertical_spacing=0.2)
 
     plot_feature_map(
         feature_matrix=temperature_matrix, axes_object=axes_object_matrix[0, 0]
@@ -2457,56 +2438,84 @@ def _run():
     kernel_matrix = numpy.expand_dims(EDGE_DETECTOR_MATRIX1, axis=-1)
     kernel_matrix = numpy.expand_dims(kernel_matrix, axis=-1)
 
-    feature_matrix_after_conv = do_2d_convolution(
+    feature_matrix_after_conv1 = do_2d_convolution(
         feature_matrix=numpy.expand_dims(temperature_matrix, axis=-1),
         kernel_matrix=kernel_matrix, pad_edges=False, stride_length_px=1
     )
 
-    feature_matrix_after_activn = do_activation(
-        input_values=feature_matrix_after_conv,
+    feature_matrix_after_activn1 = do_activation(
+        input_values=feature_matrix_after_conv1,
+        function_name=LEAKY_RELU_FUNCTION_NAME)
+
+    feature_matrix_after_conv2 = do_2d_convolution(
+        feature_matrix=feature_matrix_after_activn1,
+        kernel_matrix=kernel_matrix, pad_edges=False, stride_length_px=1)
+
+    feature_matrix_after_activn2 = do_activation(
+        input_values=feature_matrix_after_conv2,
         function_name=LEAKY_RELU_FUNCTION_NAME)
 
     feature_matrix_after_pooling = do_2d_pooling(
-        feature_matrix=feature_matrix_after_activn, stride_length_px=2,
+        feature_matrix=feature_matrix_after_activn2, stride_length_px=2,
         pooling_type_string=MAX_POOLING_TYPE_STRING)
 
-    feature_matrix_after_conv = feature_matrix_after_conv[0, ..., 0]
-    feature_matrix_after_activn = feature_matrix_after_activn[0, ..., 0]
+    feature_matrix_after_conv1 = feature_matrix_after_conv1[0, ..., 0]
+    feature_matrix_after_activn1 = feature_matrix_after_activn1[0, ..., 0]
+    feature_matrix_after_conv2 = feature_matrix_after_conv2[0, ..., 0]
+    feature_matrix_after_activn2 = feature_matrix_after_activn2[0, ..., 0]
     feature_matrix_after_pooling = feature_matrix_after_pooling[0, ..., 0]
 
     all_values = numpy.concatenate((
-        numpy.ravel(feature_matrix_after_conv),
-        numpy.ravel(feature_matrix_after_activn),
+        numpy.ravel(feature_matrix_after_conv1),
+        numpy.ravel(feature_matrix_after_activn1),
+        numpy.ravel(feature_matrix_after_conv2),
+        numpy.ravel(feature_matrix_after_activn2),
         numpy.ravel(feature_matrix_after_pooling)
     ))
     max_colour_value = numpy.percentile(numpy.absolute(all_values), 99.)
     min_colour_value = -1 * max_colour_value
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_conv,
+        feature_matrix=feature_matrix_after_conv1,
         axes_object=axes_object_matrix[0, 1],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[0, 1].set_title('After convolution')
+    axes_object_matrix[0, 1].set_title('After first conv')
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_activn,
+        feature_matrix=feature_matrix_after_activn1,
+        axes_object=axes_object_matrix[0, 2],
+        min_colour_value=min_colour_value, max_colour_value=max_colour_value
+    )
+    axes_object_matrix[0, 2].set_title('After first leaky ReLU')
+
+    plot_feature_map(
+        feature_matrix=feature_matrix_after_conv2,
         axes_object=axes_object_matrix[1, 0],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[1, 0].set_title('After leaky-ReLU activation')
+    axes_object_matrix[1, 0].set_title('After second conv')
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_pooling,
+        feature_matrix=feature_matrix_after_activn2,
         axes_object=axes_object_matrix[1, 1],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[1, 1].set_title('After max-pooling')
+    axes_object_matrix[1, 1].set_title('After second leaky ReLU')
 
-    # Batch Normalization: Example 1
+    plot_feature_map(
+        feature_matrix=feature_matrix_after_pooling,
+        axes_object=axes_object_matrix[1, 2],
+        min_colour_value=min_colour_value, max_colour_value=max_colour_value
+    )
+    axes_object_matrix[1, 2].set_title('After max-pooling')
+
+    # Example 1 of batch normalization
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[..., temperature_index]
+
+    print('Batch size = {0:d} examples'.format(temperature_matrix.shape[0]))
 
     feature_matrix = numpy.expand_dims(temperature_matrix, axis=-1)
     feature_matrix = do_batch_normalization(
@@ -2535,10 +2544,12 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After batch norm')
 
-    # Batch Normalization: Example 2
+    # Example 2 of batch normalization
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
     temperature_index = predictor_names.index(TEMPERATURE_NAME)
     temperature_matrix = predictor_matrix[..., temperature_index]
+
+    print('Batch size = {0:d} examples'.format(temperature_matrix.shape[0]))
 
     feature_matrix = numpy.expand_dims(temperature_matrix, axis=-1)
     feature_matrix = do_batch_normalization(
