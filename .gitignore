@@ -12,5 +12,6 @@ dist/
 .idea/
 *.iml
 
-# Models.
+# Models and data.
 models/
+data/
