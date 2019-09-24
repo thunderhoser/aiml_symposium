@@ -6,10 +6,13 @@ import random
 import os.path
 import collections
 import numpy
+from scipy.ndimage import median_filter
+from scipy.interpolate import RectBivariateSpline
 import netCDF4
 import keras.layers
 import keras.backend as K
 import keras.callbacks
+import tensorflow
 import matplotlib.colors
 import matplotlib.pyplot as pyplot
 from gewittergefahr.gg_utils import time_conversion
@@ -111,6 +114,7 @@ COLD_FRONT_PROB_THRESHOLD = 0.65
 # Constants for plotting.
 WIND_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
 FEATURE_COLOUR_MAP_OBJECT = pyplot.get_cmap('seismic')
+SALIENCY_COLOUR_MAP_OBJECT = pyplot.get_cmap('binary')
 
 FIGURE_WIDTH_INCHES = 15
 FIGURE_HEIGHT_INCHES = 15
@@ -267,7 +271,7 @@ def _add_colour_bar(
     error_checking.assert_is_boolean(extend_min)
     error_checking.assert_is_boolean(extend_max)
     error_checking.assert_is_greater(fraction_of_axis_length, 0.)
-    error_checking.assert_is_leq(fraction_of_axis_length, 1.)
+    # error_checking.assert_is_leq(fraction_of_axis_length, 1.)
 
     if colour_norm_object is None:
         colour_norm_object = matplotlib.colors.Normalize(
@@ -306,7 +310,8 @@ def _add_colour_bar(
 
 def create_paneled_figure(
         num_rows, num_columns, horizontal_spacing=0.05, vertical_spacing=0.05,
-        shared_x_axis=False, shared_y_axis=False, keep_aspect_ratio=True):
+        shared_x_axis=False, shared_y_axis=False, keep_aspect_ratio=True,
+        grid_spec_dict=None):
     """Creates paneled figure.
 
     This method only initializes the panels.  It does not plot anything.
@@ -327,6 +332,8 @@ def create_paneled_figure(
     :param keep_aspect_ratio: Boolean flag.  If True, the aspect ratio of each
         panel will be preserved (reflect the aspect ratio of the data plotted
         therein).
+    :param grid_spec_dict: Dictionary of grid specifications (accepted by
+        `matplotlib.pyplot.subplots`).
     :return: figure_object: Figure handle (instance of
         `matplotlib.figure.Figure`).
     :return: axes_object_matrix: J-by-K numpy array of axes handles (instances
@@ -341,9 +348,13 @@ def create_paneled_figure(
     error_checking.assert_is_boolean(shared_y_axis)
     error_checking.assert_is_boolean(keep_aspect_ratio)
 
+    if grid_spec_dict is None:
+        grid_spec_dict = dict()
+
     figure_object, axes_object_matrix = pyplot.subplots(
         num_rows, num_columns, sharex=shared_x_axis, sharey=shared_y_axis,
-        figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
+        figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES),
+        gridspec_kw=grid_spec_dict
     )
 
     if num_rows == num_columns == 1:
@@ -1294,6 +1305,29 @@ def find_many_testing_files(
     return [testing_file_names[i] for i in good_indices]
 
 
+def model_to_grid_dimensions(model_object):
+    """Reads grid dimensions from CNN.
+
+    :param model_object: Trained CNN (instance of `keras.models.Model` or
+        `keras.models.Sequential`).
+    :return: num_half_rows: Number of rows in half-grid.
+    :return: num_half_columns: Number of columns in half-grid.
+    """
+
+    input_dimensions = numpy.array(
+        model_object.layers[0].input.get_shape().as_list()[1:], dtype=int
+    )
+
+    num_half_rows = int(numpy.round(
+        (input_dimensions[0] - 1) / 2
+    ))
+    num_half_columns = int(numpy.round(
+        (input_dimensions[1] - 1) / 2
+    ))
+
+    return num_half_rows, num_half_columns
+
+
 def make_predictions(model_object, testing_file_names, predictor_names,
                      pressure_levels_mb):
     """Uses a trained CNN to make predictions.
@@ -1312,16 +1346,7 @@ def make_predictions(model_object, testing_file_names, predictor_names,
         `WARM_FRONT_ENUM`, listed at the top of this notebook.
     """
 
-    input_dimensions = numpy.array(
-        model_object.layers[0].input.get_shape().as_list()[1:], dtype=int
-    )
-
-    num_half_rows = int(numpy.round(
-        (input_dimensions[0] - 1) / 2
-    ))
-    num_half_columns = int(numpy.round(
-        (input_dimensions[1] - 1) / 2
-    ))
+    num_half_rows, num_half_columns = model_to_grid_dimensions(model_object)
 
     class_probability_matrix = None
     target_values = None
@@ -1442,6 +1467,384 @@ def plot_2class_contingency_table(contingency_matrix, axes_object=None):
     pyplot.ylabel('Predicted')
 
     return axes_object
+
+
+def get_saliency_maps(model_object, target_class, predictor_matrix):
+    """Computes saliency map for each example in `predictor_matrix`.
+
+    :param model_object: Trained CNN (instance of `keras.models`).  Saliency
+        will be computed for this CNN only.  Different models give different
+        answers.
+    :param target_class: Target class (integer).  Possible values are
+        `NO_FRONT_ENUM`, `WARM_FRONT_ENUM`, and `WARM_FRONT_ENUM`, listed at the
+        top of this notebook.
+    :param predictor_matrix: E-by-M-by-N-by-C numpy array of predictor values.
+    :return: saliency_matrix: E-by-M-by-N-by-C numpy array of saliency values.
+    """
+
+    loss_tensor = K.mean(
+        (model_object.layers[-1].output[..., target_class] - 1) ** 2
+    )
+
+    gradient_tensor = K.gradients(
+        loss_tensor, [model_object.input]
+    )[0]
+    gradient_tensor = gradient_tensor / K.maximum(
+        K.std(gradient_tensor), K.epsilon()
+    )
+
+    inputs_to_gradients_function = K.function(
+        [model_object.input, K.learning_phase()], [gradient_tensor]
+    )
+
+    saliency_matrix = inputs_to_gradients_function(
+        [predictor_matrix, 0]
+    )[0]
+
+    return -1 * saliency_matrix
+
+
+def _plot_saliency_one_field(
+        saliency_matrix, axes_object, max_absolute_contour_value,
+        contour_interval, colour_map_object=SALIENCY_COLOUR_MAP_OBJECT):
+    """Plots saliency map for one 2-D field.
+
+    M = number of rows in grid
+    N = number of columns in grid
+
+    :param saliency_matrix: M-by-N numpy array of saliency values.
+    :param axes_object: Existing axes (instance of
+        `matplotlib.axes._subplots.AxesSubplot`).
+    :param max_absolute_contour_value: Max absolute saliency value to plot.
+    :param contour_interval: Interval between successive saliency contours.
+    :param colour_map_object: Colour scheme (instance of
+        `matplotlib.pyplot.cm`).
+    """
+
+    error_checking.assert_is_geq(max_absolute_contour_value, 0.)
+    max_absolute_contour_value = numpy.maximum(max_absolute_contour_value, 1e-3)
+
+    error_checking.assert_is_geq(contour_interval, 0.)
+    contour_interval = numpy.maximum(contour_interval, 1e-4)
+    error_checking.assert_is_less_than(
+        contour_interval, max_absolute_contour_value)
+
+    num_rows = saliency_matrix.shape[0]
+    num_columns = saliency_matrix.shape[1]
+    unique_y_coords = -0.5 + numpy.linspace(1, num_rows, num=num_rows)
+    unique_x_coords = -0.5 + numpy.linspace(1, num_columns, num=num_columns)
+
+    x_coord_matrix, y_coord_matrix = numpy.meshgrid(
+        unique_x_coords, unique_y_coords)
+
+    half_num_contours = int(numpy.round(
+        1 + max_absolute_contour_value / contour_interval
+    ))
+
+    # Plot positive values.
+    these_contour_values = numpy.linspace(
+        0., max_absolute_contour_value, num=half_num_contours)
+
+    axes_object.contour(
+        x_coord_matrix, y_coord_matrix, saliency_matrix,
+        these_contour_values, cmap=colour_map_object,
+        vmin=numpy.min(these_contour_values),
+        vmax=numpy.max(these_contour_values),
+        linewidths=2, linestyles='solid', zorder=1e6)
+
+    # Plot negative values.
+    these_contour_values = these_contour_values[1:]
+
+    axes_object.contour(
+        x_coord_matrix, y_coord_matrix, -saliency_matrix,
+        these_contour_values, cmap=colour_map_object,
+        vmin=numpy.min(these_contour_values),
+        vmax=numpy.max(these_contour_values),
+        linewidths=2, linestyles='dashed', zorder=1e6)
+
+
+def plot_saliency_one_example(
+        predictor_matrix, saliency_matrix, predictor_names):
+    """Plots saliency maps for one example.
+
+    :param predictor_matrix: M-by-N-by-C numpy array of predictor values.
+    :param saliency_matrix: M-by-N-by-C numpy array of saliency values.
+    :param predictor_names: length-C list with names of predictor variables.
+    :return: figure_object: See doc for `create_paneled_figure`.
+    :return: axes_object_matrix: Same.
+    """
+
+    error_checking.assert_is_numpy_array_without_nan(predictor_matrix)
+    error_checking.assert_is_numpy_array(predictor_matrix, num_dimensions=3)
+
+    error_checking.assert_is_numpy_array_without_nan(saliency_matrix)
+    error_checking.assert_is_numpy_array(
+        saliency_matrix, exact_dimensions=numpy.array(predictor_matrix.shape)
+    )
+
+    num_predictors = predictor_matrix.shape[-1]
+    expected_dim = numpy.array([num_predictors], dtype=int)
+    error_checking.assert_is_numpy_array(
+        numpy.array(predictor_names), exact_dimensions=expected_dim
+    )
+
+    num_panel_rows = int(numpy.floor(
+        numpy.sqrt(num_predictors)
+    ))
+    num_panel_columns = int(numpy.ceil(
+        float(num_predictors) / num_panel_rows
+    ))
+
+    figure_object, axes_object_matrix = create_paneled_figure(
+        num_rows=num_panel_rows, num_columns=num_panel_columns,
+        horizontal_spacing=0.2, vertical_spacing=0.2)
+
+    max_absolute_saliency = numpy.percentile(
+        numpy.absolute(saliency_matrix), 99.
+    )
+
+    for k in range(num_predictors):
+        this_axes_object = numpy.ravel(axes_object_matrix)[k]
+        plot_feature_map(
+            feature_matrix=predictor_matrix[..., k],
+            axes_object=this_axes_object
+        )
+
+        _plot_saliency_one_field(
+            saliency_matrix=saliency_matrix[..., k],
+            axes_object=this_axes_object,
+            max_absolute_contour_value=max_absolute_saliency,
+            contour_interval=max_absolute_saliency / 10)
+
+        this_axes_object.set_title(predictor_names[k], fontsize=20)
+
+    return figure_object, axes_object_matrix
+
+
+def apply_median_filter(input_matrix_2d, num_cells_in_half_window):
+    """Applies median filter to 2-D field.
+
+    M = number of rows in grid
+    N = number of columns in grid
+
+    :param input_matrix_2d: M-by-N numpy array of raw (unfiltered) data.
+    :param num_cells_in_half_window: Number of grid cells in half-window for
+        smoothing filter.
+    :return: output_matrix_2d: M-by-N numpy array of filtered data.
+    """
+
+    error_checking.assert_is_integer(num_cells_in_half_window)
+    error_checking.assert_is_geq(num_cells_in_half_window, 1)
+
+    return median_filter(
+        input_matrix_2d, size=2 * num_cells_in_half_window + 1, mode='reflect',
+        origin=0)
+
+
+def _upsample_cam(class_activation_matrix, num_target_rows, num_target_columns):
+    """Upsamples class-activation map (CAM) to new dimensions.
+
+    m = number of rows in original grid
+    n = number of columns in original grid
+    M = number of rows in new grid
+    N = number of columns in new grid
+
+    :param class_activation_matrix: m-by-n numpy array of class activations.
+    :param num_target_rows: Number of rows in new (target) grid.
+    :param num_target_columns: Number of columns in new (target) grid.
+    :return: class_activation_matrix: M-by-N numpy array of class activations.
+    """
+
+    row_indices_new = numpy.linspace(
+        1, num_target_rows, num=num_target_rows, dtype=float
+    )
+    row_indices_orig = numpy.linspace(
+        1, num_target_rows, num=class_activation_matrix.shape[0], dtype=float
+    )
+
+    column_indices_new = numpy.linspace(
+        1, num_target_columns, num=num_target_columns, dtype=float
+    )
+    column_indices_orig = numpy.linspace(
+        1, num_target_columns, num=class_activation_matrix.shape[1], dtype=float
+    )
+
+    interp_object = RectBivariateSpline(
+        x=row_indices_orig, y=column_indices_orig, z=class_activation_matrix,
+        kx=1, ky=1, s=0)
+
+    return interp_object(x=row_indices_new, y=column_indices_new, grid=True)
+
+
+def run_gradcam(model_object, predictor_matrix, target_class,
+                target_layer_name):
+    """Runs Grad-CAM.
+
+    :param model_object: See doc for `get_saliency_maps`.
+    :param predictor_matrix: Same.
+    :param target_class: Same.
+    :param target_layer_name: Name of target layer.  Class-activation map will
+        be computed for this layer.
+    :return: class_activation_matrix: M-by-N numpy array of class activations.
+    """
+
+    # Set up tensors.
+    loss_tensor = model_object.layers[-1].input[..., target_class]
+    activation_tensor = model_object.get_layer(name=target_layer_name).output
+    gradient_tensor = tensorflow.gradients(
+        loss_tensor, [activation_tensor]
+    )[0]
+
+    root_mean_square_tensor = K.sqrt(K.mean(K.square(gradient_tensor)))
+    gradient_tensor = gradient_tensor / (root_mean_square_tensor + K.epsilon())
+
+    gradient_function = K.function(
+        [model_object.input], [activation_tensor, gradient_tensor]
+    )
+
+    # Compute activation and gradient matrices for target layer.
+    activation_matrix, gradient_matrix = gradient_function([predictor_matrix])
+    activation_matrix = activation_matrix[0, ...]
+    gradient_matrix = gradient_matrix[0, ...]
+
+    # Compute class-activation map.
+    print(gradient_matrix.shape)
+    mean_weight_by_filter = numpy.mean(gradient_matrix, axis=(0, 1))
+
+    class_activation_matrix = numpy.ones(activation_matrix.shape[:-1])
+    num_filters = len(mean_weight_by_filter)
+
+    for k in range(num_filters):
+        class_activation_matrix += (
+            mean_weight_by_filter[k] * activation_matrix[..., k]
+        )
+
+    # Upsample class-activation map to input dimensions.
+    class_activation_matrix = _upsample_cam(
+        class_activation_matrix=class_activation_matrix,
+        num_target_rows=predictor_matrix.shape[1],
+        num_target_columns=predictor_matrix.shape[2]
+    )
+
+    class_activation_matrix = numpy.maximum(class_activation_matrix, 0.)
+    return class_activation_matrix
+
+
+def _plot_class_activn_one_field(
+        class_activation_matrix, axes_object, max_contour_value,
+        contour_interval, colour_map_object=SALIENCY_COLOUR_MAP_OBJECT):
+    """Plots class-activation map for one 2-D field.
+
+    M = number of rows in grid
+    N = number of columns in grid
+
+    :param class_activation_matrix: M-by-N numpy array of saliency values.
+    :param axes_object: See doc for `_plot_saliency_one_field`.
+    :param max_contour_value: Max value to plot.
+    :param contour_interval: See doc for `_plot_saliency_one_field`.
+    :param colour_map_object: Same.
+    """
+
+    error_checking.assert_is_geq(max_contour_value, 0.)
+    max_contour_value = numpy.maximum(max_contour_value, 1e-3)
+
+    error_checking.assert_is_geq(contour_interval, 0.)
+    contour_interval = numpy.maximum(contour_interval, 1e-4)
+    error_checking.assert_is_less_than(contour_interval, max_contour_value)
+
+    num_rows = class_activation_matrix.shape[0]
+    num_columns = class_activation_matrix.shape[1]
+    unique_y_coords = -0.5 + numpy.linspace(1, num_rows, num=num_rows)
+    unique_x_coords = -0.5 + numpy.linspace(1, num_columns, num=num_columns)
+
+    x_coord_matrix, y_coord_matrix = numpy.meshgrid(
+        unique_x_coords, unique_y_coords)
+
+    num_contours = int(numpy.round(
+        1 + max_contour_value / contour_interval
+    ))
+    contour_values = numpy.linspace(0., max_contour_value, num=num_contours)
+
+    axes_object.contour(
+        x_coord_matrix, y_coord_matrix, class_activation_matrix,
+        contour_values, cmap=colour_map_object,
+        vmin=numpy.min(contour_values), vmax=numpy.max(contour_values),
+        linewidths=2, linestyles='solid', zorder=1e6)
+
+
+def plot_class_activn_one_example(
+        predictor_matrix, class_activation_matrix, predictor_names):
+    """Plots saliency maps for one example.
+
+    :param predictor_matrix: M-by-N-by-C numpy array of predictor values.
+    :param class_activation_matrix: M-by-N numpy array of class activations.
+    :param predictor_names: length-C list with names of predictor variables.
+    :return: figure_object: See doc for `create_paneled_figure`.
+    :return: axes_object_matrix: Same.
+    """
+
+    error_checking.assert_is_numpy_array_without_nan(predictor_matrix)
+    error_checking.assert_is_numpy_array(predictor_matrix, num_dimensions=3)
+
+    error_checking.assert_is_geq_numpy_array(class_activation_matrix, 0.)
+    error_checking.assert_is_numpy_array(
+        class_activation_matrix,
+        exact_dimensions=numpy.array(predictor_matrix.shape[:-1])
+    )
+
+    num_predictors = predictor_matrix.shape[-1]
+    expected_dim = numpy.array([num_predictors], dtype=int)
+    error_checking.assert_is_numpy_array(
+        numpy.array(predictor_names), exact_dimensions=expected_dim
+    )
+
+    num_panel_rows = int(numpy.floor(
+        numpy.sqrt(num_predictors)
+    ))
+    num_panel_columns = 1 + int(numpy.ceil(
+        float(num_predictors) / num_panel_rows
+    ))
+
+    column_widths = numpy.concatenate((
+        numpy.full(num_panel_columns - 1, 5), numpy.array([1])
+    ))
+
+    figure_object, axes_object_matrix = create_paneled_figure(
+        num_rows=num_panel_rows, num_columns=num_panel_columns,
+        horizontal_spacing=0.2, vertical_spacing=0.2,
+        grid_spec_dict={'width_ratios': column_widths}
+    )
+
+    for i in range(num_panel_rows):
+        axes_object_matrix[i, -1].axis('off')
+
+    max_activation = numpy.percentile(class_activation_matrix, 99.)
+
+    for k in range(num_predictors):
+        this_axes_object = numpy.ravel(axes_object_matrix[:, :-1])[k]
+        plot_feature_map(
+            feature_matrix=predictor_matrix[..., k],
+            axes_object=this_axes_object
+        )
+
+        _plot_class_activn_one_field(
+            class_activation_matrix=class_activation_matrix,
+            axes_object=this_axes_object, max_contour_value=max_activation,
+            contour_interval=max_activation / 10,
+            colour_map_object=SALIENCY_COLOUR_MAP_OBJECT)
+
+        this_axes_object.set_title(predictor_names[k], fontsize=20)
+
+    colour_bar_object = _add_colour_bar(
+        axes_object=axes_object_matrix[:, -1],
+        colour_map_object=SALIENCY_COLOUR_MAP_OBJECT,
+        values_to_colour=class_activation_matrix, min_colour_value=0.,
+        max_colour_value=max_activation, orientation_string='vertical',
+        extend_min=False, extend_max=True, fraction_of_axis_length=2.)
+
+    colour_bar_object.set_label('Class activation')
+
+    return figure_object, axes_object_matrix
 
 
 def _run():
@@ -2763,6 +3166,346 @@ def _run():
         mean_forecast_by_bin=mean_forecast_probs,
         event_frequency_by_bin=observed_frequencies,
         num_examples_by_bin=example_counts)
+
+    # Saliency: Example 1
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, NO_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    saliency_matrix = get_saliency_maps(
+        model_object=best_model_object, target_class=WARM_FRONT_ENUM,
+        predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0)
+    )
+
+    saliency_matrix = saliency_matrix[0, ...]
+    num_predictors = saliency_matrix.shape[-1]
+
+    for k in range(num_predictors):
+        saliency_matrix[..., k] = apply_median_filter(
+            input_matrix_2d=saliency_matrix[..., k], num_cells_in_half_window=1
+        )
+
+    plot_saliency_one_example(
+        predictor_matrix=predictor_matrix[..., :4],
+        saliency_matrix=saliency_matrix[..., :4],
+        predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+    )
+
+    # Saliency: Example 2
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, NO_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    saliency_matrix = get_saliency_maps(
+        model_object=best_model_object, target_class=COLD_FRONT_ENUM,
+        predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0)
+    )
+
+    saliency_matrix = saliency_matrix[0, ...]
+    num_predictors = saliency_matrix.shape[-1]
+
+    for k in range(num_predictors):
+        saliency_matrix[..., k] = apply_median_filter(
+            input_matrix_2d=saliency_matrix[..., k], num_cells_in_half_window=1
+        )
+
+    plot_saliency_one_example(
+        predictor_matrix=predictor_matrix[..., :4],
+        saliency_matrix=saliency_matrix[..., :4],
+        predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+    )
+
+    # Saliency: Example 3
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, COLD_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    saliency_matrix = get_saliency_maps(
+        model_object=best_model_object, target_class=COLD_FRONT_ENUM,
+        predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0)
+    )
+
+    saliency_matrix = saliency_matrix[0, ...]
+    num_predictors = saliency_matrix.shape[-1]
+
+    for k in range(num_predictors):
+        saliency_matrix[..., k] = apply_median_filter(
+            input_matrix_2d=saliency_matrix[..., k], num_cells_in_half_window=1
+        )
+
+    plot_saliency_one_example(
+        predictor_matrix=predictor_matrix[..., :4],
+        saliency_matrix=saliency_matrix[..., :4],
+        predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+    )
+
+    # Saliency: Example 4
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, COLD_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    saliency_matrix = get_saliency_maps(
+        model_object=best_model_object, target_class=WARM_FRONT_ENUM,
+        predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0)
+    )
+
+    saliency_matrix = saliency_matrix[0, ...]
+    num_predictors = saliency_matrix.shape[-1]
+
+    for k in range(num_predictors):
+        saliency_matrix[..., k] = apply_median_filter(
+            input_matrix_2d=saliency_matrix[..., k], num_cells_in_half_window=1
+        )
+
+    plot_saliency_one_example(
+        predictor_matrix=predictor_matrix[..., :4],
+        saliency_matrix=saliency_matrix[..., :4],
+        predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+    )
+
+    # Grad-CAM: Example 1
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, WARM_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    conv_layer_names = [
+        l.name for l in best_model_object.layers
+        if 'batch_normalization' in l.name
+    ]
+
+    conv_layer_names = conv_layer_names[:4]
+    num_conv_layers = len(conv_layer_names)
+
+    for i in range(num_conv_layers):
+        class_activation_matrix = run_gradcam(
+            model_object=best_model_object,
+            predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
+            target_class=WARM_FRONT_ENUM, target_layer_name=conv_layer_names[i]
+        )
+
+        class_activation_matrix = apply_median_filter(
+            input_matrix_2d=class_activation_matrix, num_cells_in_half_window=1)
+
+        class_activation_matrix = numpy.maximum(class_activation_matrix, 0.)
+
+        figure_object, _ = plot_class_activn_one_example(
+            predictor_matrix=predictor_matrix[..., :4],
+            class_activation_matrix=class_activation_matrix,
+            predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+        )
+
+        title_string = (
+            'Warm-front activation for {0:d}th of {1:d} conv layers'
+        ).format(i + 1, num_conv_layers)
+
+        figure_object.suptitle(title_string, y=1.01)
+
+    # Grad-CAM: Example 2
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, WARM_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    conv_layer_names = [
+        l.name for l in best_model_object.layers
+        if 'batch_normalization' in l.name
+    ]
+
+    conv_layer_names = conv_layer_names[:4]
+    num_conv_layers = len(conv_layer_names)
+
+    for i in range(num_conv_layers):
+        class_activation_matrix = run_gradcam(
+            model_object=best_model_object,
+            predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
+            target_class=COLD_FRONT_ENUM, target_layer_name=conv_layer_names[i]
+        )
+
+        class_activation_matrix = apply_median_filter(
+            input_matrix_2d=class_activation_matrix, num_cells_in_half_window=1)
+
+        class_activation_matrix = numpy.maximum(class_activation_matrix, 0.)
+
+        figure_object, _ = plot_class_activn_one_example(
+            predictor_matrix=predictor_matrix[..., :4],
+            class_activation_matrix=class_activation_matrix,
+            predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+        )
+
+        title_string = (
+            'Cold-front activation for {0:d}th of {1:d} conv layers'
+        ).format(i + 1, num_conv_layers)
+
+        figure_object.suptitle(title_string, y=1.01)
+
+    # Grad-CAM: Example 3
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, COLD_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    conv_layer_names = [
+        l.name for l in best_model_object.layers
+        if 'batch_normalization' in l.name
+    ]
+
+    conv_layer_names = conv_layer_names[:4]
+    num_conv_layers = len(conv_layer_names)
+
+    for i in range(num_conv_layers):
+        class_activation_matrix = run_gradcam(
+            model_object=best_model_object,
+            predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
+            target_class=COLD_FRONT_ENUM, target_layer_name=conv_layer_names[i]
+        )
+
+        class_activation_matrix = apply_median_filter(
+            input_matrix_2d=class_activation_matrix, num_cells_in_half_window=1)
+
+        class_activation_matrix = numpy.maximum(class_activation_matrix, 0.)
+
+        figure_object, _ = plot_class_activn_one_example(
+            predictor_matrix=predictor_matrix[..., :4],
+            class_activation_matrix=class_activation_matrix,
+            predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+        )
+
+        title_string = (
+            'Cold-front activation for {0:d}th of {1:d} conv layers'
+        ).format(i + 1, num_conv_layers)
+
+        figure_object.suptitle(title_string, y=1.01)
+
+    # Grad-CAM: Example 4
+    num_half_rows, num_half_columns = model_to_grid_dimensions(
+        best_model_object)
+
+    print('Reading data from: "{0:s}"...'.format(testing_file_names[0]))
+    example_dict = read_examples(
+        netcdf_file_name=testing_file_names[0],
+        predictor_names_to_keep=PREDICTOR_NAMES_FOR_CNN,
+        pressure_levels_to_keep_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+        num_half_rows_to_keep=num_half_rows,
+        num_half_columns_to_keep=num_half_columns)
+
+    example_index = numpy.where(
+        example_dict[TARGET_MATRIX_KEY][:, COLD_FRONT_ENUM] == 1
+    )[0][0]
+    predictor_matrix = example_dict[PREDICTOR_MATRIX_KEY][example_index, ...]
+
+    conv_layer_names = [
+        l.name for l in best_model_object.layers
+        if 'batch_normalization' in l.name
+    ]
+
+    conv_layer_names = conv_layer_names[:4]
+    num_conv_layers = len(conv_layer_names)
+
+    for i in range(num_conv_layers):
+        class_activation_matrix = run_gradcam(
+            model_object=best_model_object,
+            predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
+            target_class=WARM_FRONT_ENUM, target_layer_name=conv_layer_names[i]
+        )
+
+        class_activation_matrix = apply_median_filter(
+            input_matrix_2d=class_activation_matrix, num_cells_in_half_window=1)
+
+        class_activation_matrix = numpy.maximum(class_activation_matrix, 0.)
+
+        figure_object, _ = plot_class_activn_one_example(
+            predictor_matrix=predictor_matrix[..., :4],
+            class_activation_matrix=class_activation_matrix,
+            predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
+        )
+
+        title_string = (
+            'Warm-front activation for {0:d}th of {1:d} conv layers'
+        ).format(i + 1, num_conv_layers)
+
+        figure_object.suptitle(title_string, y=1.01)
 
 
 if __name__ == '__main__':
