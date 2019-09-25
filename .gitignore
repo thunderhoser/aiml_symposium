@@ -11,6 +11,7 @@ dist/
 # IntelliJ things.
 .idea/
 *.iml
+aiml_symposium/.ipynb_checkpoints/
 
 # Models and data.
 models/
