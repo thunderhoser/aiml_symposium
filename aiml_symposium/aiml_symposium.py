@@ -1416,12 +1416,11 @@ def plot_3class_contingency_table(contingency_matrix, axes_object=None):
                 horizontalalignment='center', verticalalignment='center')
 
     tick_locations = numpy.array([0, 1, 2], dtype=int)
-    x_tick_labels = ['NF (no front)', 'WF (warm front)', 'CF (cold front)']
-    y_tick_labels = ['NF', 'WF', 'CF']
+    tick_labels = ['NF', 'WF', 'CF']
 
-    pyplot.xticks(tick_locations, x_tick_labels)
+    pyplot.xticks(tick_locations, tick_labels)
     pyplot.xlabel('Actual')
-    pyplot.yticks(tick_locations, y_tick_labels)
+    pyplot.yticks(tick_locations, tick_labels)
     pyplot.ylabel('Predicted')
 
     return axes_object
@@ -1456,12 +1455,11 @@ def plot_2class_contingency_table(contingency_matrix, axes_object=None):
                 horizontalalignment='center', verticalalignment='center')
 
     tick_locations = numpy.array([0, 1], dtype=int)
-    x_tick_labels = ['Front', 'No front']
-    y_tick_labels = ['Front', 'No front']
+    tick_labels = ['Yes', 'No']
 
-    pyplot.xticks(tick_locations, x_tick_labels)
+    pyplot.xticks(tick_locations, tick_labels)
     pyplot.xlabel('Actual')
-    pyplot.yticks(tick_locations, y_tick_labels)
+    pyplot.yticks(tick_locations, tick_labels)
     pyplot.ylabel('Predicted')
 
     return axes_object
@@ -2578,7 +2576,7 @@ def _run():
     )
     axes_object_matrix[0, 1].set_title('After batch norm')
 
-    # Workflow of a CNN: Example 3
+    # Example 3 of convolution block
     num_examples = 100
 
     predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
@@ -2586,17 +2584,17 @@ def _run():
     temperature_matrix = predictor_matrix[:num_examples, ..., temperature_index]
 
     _, axes_object_matrix = create_paneled_figure(
-        num_rows=2, num_columns=3, horizontal_spacing=0.2, vertical_spacing=0.2)
+        num_rows=2, num_columns=4, horizontal_spacing=0.2, vertical_spacing=0.2)
 
     plot_feature_map(
         feature_matrix=temperature_matrix[8, ...],
         axes_object=axes_object_matrix[0, 0]
     )
-    axes_object_matrix[0, 0].set_title('Before convolution')
+    axes_object_matrix[0, 0].set_title('Before convolution', fontsize=20)
 
     kernel_matrix = numpy.expand_dims(EDGE_DETECTOR_MATRIX1, axis=-1)
     kernel_matrix = numpy.expand_dims(kernel_matrix, axis=-1)
-    feature_matrix_after_conv = None
+    feature_matrix_after_conv1 = None
 
     for i in range(num_examples):
         if numpy.mod(i, 10) == 0:
@@ -2609,160 +2607,121 @@ def _run():
             kernel_matrix=kernel_matrix, pad_edges=False, stride_length_px=1
         )
 
-        if feature_matrix_after_conv is None:
+        if feature_matrix_after_conv1 is None:
             dimensions = (num_examples,) + this_feature_matrix.shape[1:]
-            feature_matrix_after_conv = numpy.full(dimensions, numpy.nan)
+            feature_matrix_after_conv1 = numpy.full(dimensions, numpy.nan)
 
-        feature_matrix_after_conv[i, ...] = this_feature_matrix[0, ...]
+        feature_matrix_after_conv1[i, ...] = this_feature_matrix[0, ...]
 
-    feature_matrix_after_activn = do_activation(
-        input_values=feature_matrix_after_conv,
-        function_name=RELU_FUNCTION_NAME)
-
-    feature_matrix_after_bn = do_batch_normalization(
-        feature_matrix=feature_matrix_after_activn,
-        scale_parameter=1., shift_parameter=0.)
-
-    feature_matrix_after_pooling = do_2d_pooling(
-        feature_matrix=feature_matrix_after_bn, stride_length_px=2,
-        pooling_type_string=MAX_POOLING_TYPE_STRING)
-
-    feature_matrix_after_conv = feature_matrix_after_conv[8, ..., 0]
-    feature_matrix_after_activn = feature_matrix_after_activn[8, ..., 0]
-    feature_matrix_after_bn = feature_matrix_after_bn[8, ..., 0]
-    feature_matrix_after_pooling = feature_matrix_after_pooling[8, ..., 0]
-
-    all_values = numpy.concatenate((
-        numpy.ravel(feature_matrix_after_conv),
-        numpy.ravel(feature_matrix_after_activn),
-        numpy.ravel(feature_matrix_after_bn),
-        numpy.ravel(feature_matrix_after_pooling)
-    ))
-    max_colour_value = numpy.percentile(numpy.absolute(all_values), 99.)
-    min_colour_value = -1 * max_colour_value
-
-    plot_feature_map(
-        feature_matrix=feature_matrix_after_conv,
-        axes_object=axes_object_matrix[0, 1],
-        min_colour_value=min_colour_value, max_colour_value=max_colour_value
-    )
-    axes_object_matrix[0, 1].set_title('After convolution')
-
-    plot_feature_map(
-        feature_matrix=feature_matrix_after_activn,
-        axes_object=axes_object_matrix[0, 2],
-        min_colour_value=min_colour_value, max_colour_value=max_colour_value
-    )
-    axes_object_matrix[0, 2].set_title('After ReLU activation')
-
-    plot_feature_map(
-        feature_matrix=feature_matrix_after_bn,
-        axes_object=axes_object_matrix[1, 0],
-        min_colour_value=min_colour_value, max_colour_value=max_colour_value
-    )
-    axes_object_matrix[1, 0].set_title('After batch norm')
-
-    plot_feature_map(
-        feature_matrix=feature_matrix_after_pooling,
-        axes_object=axes_object_matrix[1, 1],
-        min_colour_value=min_colour_value, max_colour_value=max_colour_value
-    )
-    axes_object_matrix[1, 1].set_title('After max-pooling')
-    axes_object_matrix[1, 2].axis('off')
-
-    # Workflow of a CNN: Example 4
-    num_examples = 100
-
-    predictor_matrix = training_example_dict[PREDICTOR_MATRIX_KEY]
-    temperature_index = predictor_names.index(TEMPERATURE_NAME)
-    temperature_matrix = predictor_matrix[:num_examples, ..., temperature_index]
-
-    _, axes_object_matrix = create_paneled_figure(
-        num_rows=2, num_columns=3, horizontal_spacing=0.2, vertical_spacing=0.2)
-
-    plot_feature_map(
-        feature_matrix=temperature_matrix[8, ...],
-        axes_object=axes_object_matrix[0, 0]
-    )
-    axes_object_matrix[0, 0].set_title('Before convolution')
-
-    kernel_matrix = numpy.expand_dims(EDGE_DETECTOR_MATRIX1, axis=-1)
-    kernel_matrix = numpy.expand_dims(kernel_matrix, axis=-1)
-    feature_matrix_after_conv = None
-
-    for i in range(num_examples):
-        if numpy.mod(i, 10) == 0:
-            print('Convolving over example {0:d} of {1:d}...'.format(
-                i + 1, num_examples
-            ))
-
-        this_feature_matrix = do_2d_convolution(
-            feature_matrix=numpy.expand_dims(temperature_matrix[[i]], axis=-1),
-            kernel_matrix=kernel_matrix, pad_edges=False, stride_length_px=1
-        )
-
-        if feature_matrix_after_conv is None:
-            dimensions = (num_examples,) + this_feature_matrix.shape[1:]
-            feature_matrix_after_conv = numpy.full(dimensions, numpy.nan)
-
-        feature_matrix_after_conv[i, ...] = this_feature_matrix[0, ...]
-
-    feature_matrix_after_activn = do_activation(
-        input_values=feature_matrix_after_conv,
+    feature_matrix_after_activn1 = do_activation(
+        input_values=feature_matrix_after_conv1,
         function_name=LEAKY_RELU_FUNCTION_NAME)
 
-    feature_matrix_after_bn = do_batch_normalization(
-        feature_matrix=feature_matrix_after_activn,
+    feature_matrix_after_bn1 = do_batch_normalization(
+        feature_matrix=feature_matrix_after_activn1,
+        scale_parameter=1., shift_parameter=0.)
+
+    feature_matrix_after_conv2 = None
+
+    for i in range(num_examples):
+        if numpy.mod(i, 10) == 0:
+            print('Convolving over example {0:d} of {1:d}...'.format(
+                i + 1, num_examples
+            ))
+
+        this_feature_matrix = do_2d_convolution(
+            feature_matrix=feature_matrix_after_bn1[i, ...],
+            kernel_matrix=kernel_matrix, pad_edges=False, stride_length_px=1
+        )
+
+        if feature_matrix_after_conv2 is None:
+            dimensions = (num_examples,) + this_feature_matrix.shape[1:]
+            feature_matrix_after_conv2 = numpy.full(dimensions, numpy.nan)
+
+        feature_matrix_after_conv2[i, ...] = this_feature_matrix[0, ...]
+
+    feature_matrix_after_activn2 = do_activation(
+        input_values=feature_matrix_after_conv2,
+        function_name=LEAKY_RELU_FUNCTION_NAME)
+
+    feature_matrix_after_bn2 = do_batch_normalization(
+        feature_matrix=feature_matrix_after_activn2,
         scale_parameter=1., shift_parameter=0.)
 
     feature_matrix_after_pooling = do_2d_pooling(
-        feature_matrix=feature_matrix_after_bn, stride_length_px=2,
+        feature_matrix=feature_matrix_after_bn2, stride_length_px=2,
         pooling_type_string=MAX_POOLING_TYPE_STRING)
 
-    feature_matrix_after_conv = feature_matrix_after_conv[8, ..., 0]
-    feature_matrix_after_activn = feature_matrix_after_activn[8, ..., 0]
-    feature_matrix_after_bn = feature_matrix_after_bn[8, ..., 0]
+    feature_matrix_after_conv1 = feature_matrix_after_conv1[8, ..., 0]
+    feature_matrix_after_activn1 = feature_matrix_after_activn1[8, ..., 0]
+    feature_matrix_after_bn1 = feature_matrix_after_bn1[8, ..., 0]
+    feature_matrix_after_conv2 = feature_matrix_after_conv2[8, ..., 0]
+    feature_matrix_after_activn2 = feature_matrix_after_activn2[8, ..., 0]
+    feature_matrix_after_bn2 = feature_matrix_after_bn2[8, ..., 0]
     feature_matrix_after_pooling = feature_matrix_after_pooling[8, ..., 0]
 
     all_values = numpy.concatenate((
-        numpy.ravel(feature_matrix_after_conv),
-        numpy.ravel(feature_matrix_after_activn),
-        numpy.ravel(feature_matrix_after_bn),
+        numpy.ravel(feature_matrix_after_conv1),
+        numpy.ravel(feature_matrix_after_activn1),
+        numpy.ravel(feature_matrix_after_bn1),
+        numpy.ravel(feature_matrix_after_conv2),
+        numpy.ravel(feature_matrix_after_activn2),
+        numpy.ravel(feature_matrix_after_bn2),
         numpy.ravel(feature_matrix_after_pooling)
     ))
     max_colour_value = numpy.percentile(numpy.absolute(all_values), 99.)
     min_colour_value = -1 * max_colour_value
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_conv,
+        feature_matrix=feature_matrix_after_conv1,
         axes_object=axes_object_matrix[0, 1],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[0, 1].set_title('After convolution')
+    axes_object_matrix[0, 1].set_title('After first conv', fontsize=20)
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_activn,
+        feature_matrix=feature_matrix_after_activn1,
         axes_object=axes_object_matrix[0, 2],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[0, 2].set_title('After leaky-ReLU activation')
+    axes_object_matrix[0, 2].set_title('After first leaky ReLU', fontsize=20)
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_bn,
+        feature_matrix=feature_matrix_after_bn1,
+        axes_object=axes_object_matrix[0, 3],
+        min_colour_value=min_colour_value, max_colour_value=max_colour_value
+    )
+    axes_object_matrix[0, 3].set_title('After first batch norm', fontsize=20)
+
+    plot_feature_map(
+        feature_matrix=feature_matrix_after_conv2,
         axes_object=axes_object_matrix[1, 0],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[1, 0].set_title('After batch norm')
+    axes_object_matrix[1, 0].set_title('After second conv', fontsize=20)
 
     plot_feature_map(
-        feature_matrix=feature_matrix_after_pooling,
+        feature_matrix=feature_matrix_after_activn2,
         axes_object=axes_object_matrix[1, 1],
         min_colour_value=min_colour_value, max_colour_value=max_colour_value
     )
-    axes_object_matrix[1, 1].set_title('After max-pooling')
-    axes_object_matrix[1, 2].axis('off')
+    axes_object_matrix[1, 1].set_title('After second leaky ReLU', fontsize=20)
 
-    # CNN Architecture: Example 1
+    plot_feature_map(
+        feature_matrix=feature_matrix_after_bn2,
+        axes_object=axes_object_matrix[1, 2],
+        min_colour_value=min_colour_value, max_colour_value=max_colour_value
+    )
+    axes_object_matrix[1, 2].set_title('After second batch norm', fontsize=20)
+
+    plot_feature_map(
+        feature_matrix=feature_matrix_after_pooling,
+        axes_object=axes_object_matrix[1, 3],
+        min_colour_value=min_colour_value, max_colour_value=max_colour_value
+    )
+    axes_object_matrix[1, 3].set_title('After max-pooling', fontsize=20)
+
+    # Example 1 of CNN architecture
     num_grid_rows = 33
     num_grid_columns = 33
     num_channels = 8
@@ -2853,8 +2812,20 @@ def _run():
 
     model_object.summary()
     
-    # Training CNN: Example 1
+    # Example 1 of CNN-training
     simple_model_file_name = '{0:s}/simple_cnn.h5'.format(OUTPUT_DIR_NAME)
+
+    # training_generator = example_generator(
+    #     top_input_dir_name=TOP_TRAINING_DIR_NAME,
+    #     predictor_names=PREDICTOR_NAMES_FOR_CNN,
+    #     pressure_levels_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+    #     num_half_rows=16, num_half_columns=16, num_examples_per_batch=1024)
+    #
+    # validation_generator = example_generator(
+    #     top_input_dir_name=TOP_VALIDATION_DIR_NAME,
+    #     predictor_names=PREDICTOR_NAMES_FOR_CNN,
+    #     pressure_levels_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+    #     num_half_rows=16, num_half_columns=16, num_examples_per_batch=1024)
 
     training_generator = example_generator(
         top_input_dir_name=TOP_TRAINING_DIR_NAME,
@@ -2875,7 +2846,7 @@ def _run():
         training_generator=training_generator,
         validation_generator=validation_generator)
 
-    # CNN Architecture: Example 2
+    # Example 2 of CNN architecture
     num_grid_rows = 33
     num_grid_columns = 33
     num_channels = 8
@@ -2999,8 +2970,20 @@ def _run():
 
     model_object.summary()
 
-    # Training CNN: Example 2
+    # Example 2 of CNN-training
     fancy_model_file_name = '{0:s}/fancy_cnn.h5'.format(OUTPUT_DIR_NAME)
+
+    # training_generator = example_generator(
+    #     top_input_dir_name=TOP_TRAINING_DIR_NAME,
+    #     predictor_names=PREDICTOR_NAMES_FOR_CNN,
+    #     pressure_levels_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+    #     num_half_rows=16, num_half_columns=16, num_examples_per_batch=1024)
+    #
+    # validation_generator = example_generator(
+    #     top_input_dir_name=TOP_VALIDATION_DIR_NAME,
+    #     predictor_names=PREDICTOR_NAMES_FOR_CNN,
+    #     pressure_levels_mb=PRESSURE_LEVELS_FOR_CNN_MB,
+    #     num_half_rows=16, num_half_columns=16, num_examples_per_batch=1024)
 
     training_generator = example_generator(
         top_input_dir_name=TOP_TRAINING_DIR_NAME,
@@ -3021,7 +3004,7 @@ def _run():
         training_generator=training_generator,
         validation_generator=validation_generator)
 
-    # Make Predictions for Testing Data
+    # Application to Testing Data
     first_testing_time_unix_sec = time_conversion.string_to_unix_sec(
         '2016-11-01-00', '%Y-%m-%d-%H')
     last_testing_time_unix_sec = time_conversion.string_to_unix_sec(
@@ -3038,7 +3021,7 @@ def _run():
         predictor_names=PREDICTOR_NAMES_FOR_CNN,
         pressure_levels_mb=PRESSURE_LEVELS_FOR_CNN_MB)
 
-    # Determinization
+    # Evaluation on Testing Data
     num_examples = len(observed_labels)
     predicted_labels = numpy.full(num_examples, NO_FRONT_ENUM, dtype=int)
 
@@ -3052,17 +3035,41 @@ def _run():
         cold_front_probs >= COLD_FRONT_PROB_THRESHOLD
     ] = COLD_FRONT_ENUM
 
-    # Binary Evaluation
-    binary_ct_as_dict = binary_eval.get_contingency_table(
+    contingency_matrix = eval_utils.get_contingency_table(
+        predicted_labels=predicted_labels, observed_labels=observed_labels,
+        num_classes=3)
+
+    _, axes_object = pyplot.subplots(1, 1, figsize=(10, 10))
+    plot_3class_contingency_table(contingency_matrix=contingency_matrix,
+                                  axes_object=axes_object)
+    axes_object.set_title('3-class contingency table')
+
+    binary_contingency_dict = binary_eval.get_contingency_table(
         forecast_labels=(predicted_labels != NO_FRONT_ENUM).astype(int),
         observed_labels=(observed_labels != NO_FRONT_ENUM).astype(int)
     )
 
-    binary_pod = binary_eval.get_pod(binary_ct_as_dict)
-    binary_pofd = binary_eval.get_pofd(binary_ct_as_dict)
-    binary_far = binary_eval.get_far(binary_ct_as_dict)
-    binary_csi = binary_eval.get_csi(binary_ct_as_dict)
-    binary_frequency_bias = binary_eval.get_frequency_bias(binary_ct_as_dict)
+    a = binary_contingency_dict[binary_eval.NUM_TRUE_POSITIVES_KEY]
+    b = binary_contingency_dict[binary_eval.NUM_FALSE_POSITIVES_KEY]
+    c = binary_contingency_dict[binary_eval.NUM_FALSE_NEGATIVES_KEY]
+    d = binary_contingency_dict[binary_eval.NUM_TRUE_NEGATIVES_KEY]
+
+    binary_contingency_matrix = numpy.array([
+        [a, b],
+        [c, d]
+    ])
+
+    _, axes_object = pyplot.subplots(1, 1, figsize=(10, 10))
+    plot_2class_contingency_table(contingency_matrix=binary_contingency_matrix,
+                                  axes_object=axes_object)
+    axes_object.set_title('2-class contingency table')
+
+    binary_pod = binary_eval.get_pod(binary_contingency_dict)
+    binary_pofd = binary_eval.get_pofd(binary_contingency_dict)
+    binary_far = binary_eval.get_far(binary_contingency_dict)
+    binary_csi = binary_eval.get_csi(binary_contingency_dict)
+    binary_frequency_bias = binary_eval.get_frequency_bias(
+        binary_contingency_dict)
 
     print((
         'POD (probability of detection) = fraction of fronts called fronts = '
@@ -3098,30 +3105,7 @@ def _run():
         binary_frequency_bias
     ))
 
-    # Plot Contingency Tables
-    contingency_matrix = eval_utils.get_contingency_table(
-        predicted_labels=predicted_labels, observed_labels=observed_labels,
-        num_classes=3)
-
-    binary_ct_as_dict = binary_eval.get_contingency_table(
-        forecast_labels=(predicted_labels != NO_FRONT_ENUM).astype(int),
-        observed_labels=(observed_labels != NO_FRONT_ENUM).astype(int)
-    )
-
-    a = binary_ct_as_dict[binary_eval.NUM_TRUE_POSITIVES_KEY]
-    b = binary_ct_as_dict[binary_eval.NUM_FALSE_POSITIVES_KEY]
-    c = binary_ct_as_dict[binary_eval.NUM_FALSE_NEGATIVES_KEY]
-    d = binary_ct_as_dict[binary_eval.NUM_TRUE_NEGATIVES_KEY]
-
-    binary_contingency_matrix = numpy.array([
-        [a, b],
-        [c, d]
-    ])
-
-    plot_3class_contingency_table(contingency_matrix)
-    plot_2class_contingency_table(binary_contingency_matrix)
-
-    # Plot ROC curve
+    # ROC Curve and Performance Diagram
     any_front_probs = 1. - class_probability_matrix[:, NO_FRONT_ENUM]
 
     pofd_by_threshold, pod_by_threshold = binary_eval.get_points_in_roc_curve(
@@ -3129,10 +3113,7 @@ def _run():
         observed_labels=(observed_labels != NO_FRONT_ENUM).astype(int),
         threshold_arg=1001)
 
-    _, axes_object = pyplot.subplots(
-        1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
-    )
-
+    _, axes_object = pyplot.subplots(1, 1, figsize=(10, 10))
     model_eval_plotting.plot_roc_curve(
         axes_object=axes_object, pod_by_threshold=pod_by_threshold,
         pofd_by_threshold=pofd_by_threshold)
@@ -3142,9 +3123,6 @@ def _run():
 
     axes_object.set_title('Area under curve = {0:.3f}'.format(auc))
 
-    # Plot performance diagram
-    any_front_probs = 1. - class_probability_matrix[:, NO_FRONT_ENUM]
-
     success_ratio_by_threshold, pod_by_threshold = (
         binary_eval.get_points_in_performance_diagram(
             forecast_probabilities=any_front_probs,
@@ -3152,15 +3130,12 @@ def _run():
             threshold_arg=1001)
     )
 
-    _, axes_object = pyplot.subplots(
-        1, 1, figsize=(FIGURE_WIDTH_INCHES, FIGURE_HEIGHT_INCHES)
-    )
-
+    _, axes_object = pyplot.subplots(1, 1, figsize=(10, 10))
     model_eval_plotting.plot_performance_diagram(
         axes_object=axes_object, pod_by_threshold=pod_by_threshold,
         success_ratio_by_threshold=success_ratio_by_threshold)
 
-    # Plot reliability curve
+    # Attributes Diagram
     mean_forecast_probs, observed_frequencies, example_counts = (
         binary_eval.get_points_in_reliability_curve(
             forecast_probabilities=any_front_probs,
@@ -3178,7 +3153,7 @@ def _run():
         event_frequency_by_bin=observed_frequencies,
         num_examples_by_bin=example_counts)
 
-    # Saliency: Example 1
+    # Saliency example 1: WF saliency for NF example
     num_half_rows, num_half_columns = model_to_grid_dimensions(
         best_model_object)
 
@@ -3214,7 +3189,7 @@ def _run():
         predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
     )
 
-    # Saliency: Example 2
+    # Saliency example 2: CF saliency for NF example
     num_half_rows, num_half_columns = model_to_grid_dimensions(
         best_model_object)
 
@@ -3250,7 +3225,7 @@ def _run():
         predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
     )
 
-    # Saliency: Example 3
+    # Saliency example 3: CF saliency for CF example
     num_half_rows, num_half_columns = model_to_grid_dimensions(
         best_model_object)
 
@@ -3286,7 +3261,7 @@ def _run():
         predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
     )
 
-    # Saliency: Example 4
+    # Saliency example 4: WF saliency for CF example
     num_half_rows, num_half_columns = model_to_grid_dimensions(
         best_model_object)
 
@@ -3322,7 +3297,7 @@ def _run():
         predictor_names=PREDICTOR_NAMES_FOR_CNN[:4]
     )
 
-    # Grad-CAM: Example 1
+    # CAM example 1
     num_half_rows, num_half_columns = model_to_grid_dimensions(
         best_model_object)
 
@@ -3347,7 +3322,7 @@ def _run():
     conv_layer_names = conv_layer_names[:4]
     num_conv_layers = len(conv_layer_names)
 
-    for i in range(num_conv_layers):
+    for i in [0, 3]:
         class_activation_matrix = run_gradcam(
             model_object=best_model_object,
             predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
@@ -3366,7 +3341,7 @@ def _run():
         )
 
         title_string = (
-            'Warm-front activation for {0:d}th of {1:d} conv layers'
+            'WF activation for {0:d}th of {1:d} conv layers'
         ).format(i + 1, num_conv_layers)
 
         figure_object.suptitle(title_string, y=1.01)
@@ -3396,7 +3371,7 @@ def _run():
     conv_layer_names = conv_layer_names[:4]
     num_conv_layers = len(conv_layer_names)
 
-    for i in range(num_conv_layers):
+    for i in [0, 3]:
         class_activation_matrix = run_gradcam(
             model_object=best_model_object,
             predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
@@ -3415,7 +3390,7 @@ def _run():
         )
 
         title_string = (
-            'Cold-front activation for {0:d}th of {1:d} conv layers'
+            'CF activation for {0:d}th of {1:d} conv layers'
         ).format(i + 1, num_conv_layers)
 
         figure_object.suptitle(title_string, y=1.01)
@@ -3445,7 +3420,7 @@ def _run():
     conv_layer_names = conv_layer_names[:4]
     num_conv_layers = len(conv_layer_names)
 
-    for i in range(num_conv_layers):
+    for i in [0, 3]:
         class_activation_matrix = run_gradcam(
             model_object=best_model_object,
             predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
@@ -3464,7 +3439,7 @@ def _run():
         )
 
         title_string = (
-            'Cold-front activation for {0:d}th of {1:d} conv layers'
+            'CF activation for {0:d}th of {1:d} conv layers'
         ).format(i + 1, num_conv_layers)
 
         figure_object.suptitle(title_string, y=1.01)
@@ -3494,7 +3469,7 @@ def _run():
     conv_layer_names = conv_layer_names[:4]
     num_conv_layers = len(conv_layer_names)
 
-    for i in range(num_conv_layers):
+    for i in [0, 3]:
         class_activation_matrix = run_gradcam(
             model_object=best_model_object,
             predictor_matrix=numpy.expand_dims(predictor_matrix, axis=0),
@@ -3513,7 +3488,7 @@ def _run():
         )
 
         title_string = (
-            'Warm-front activation for {0:d}th of {1:d} conv layers'
+            'WF activation for {0:d}th of {1:d} conv layers'
         ).format(i + 1, num_conv_layers)
 
         figure_object.suptitle(title_string, y=1.01)
